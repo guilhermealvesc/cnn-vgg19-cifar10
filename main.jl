@@ -1,151 +1,90 @@
-################################################################################
-# ML > Supervised Learning > Artificial Neural Network
-################################################################################
+ENV["JULIA_CUDA_SILENT"] = true
+using LinearAlgebra, Statistics, Flux, MLDatasets, Plots
+using BetaML: ConfusionMatrix, fit!, info
+using Printf
 
-# load packages
+x_treino, y_treino = MLDatasets.MNIST(split=:train)[:]
+x_treino          = permutedims(x_treino,(2,1,3)); # For correct img axis
+x_treino          = convert(Array{Float32,3},x_treino);
+x_treino          = reshape(x_treino,(28,28,1,60000));
+y_treino          = Flux.onehotbatch(y_treino, 0:9)
+dados_treino       = Flux.Data.DataLoader((x_treino, y_treino), batchsize=128)
 
-using Flux, Images, MLDatasets, Plots
+x_teste, y_teste  = MLDatasets.MNIST(split=:test)[:]
+x_teste           = permutedims(x_teste,(2,1,3)); # For correct img axis
+x_teste           = convert(Array{Float32,3},x_teste);
+x_teste           = reshape(x_teste,(28,28,1,10000));
+y_teste           = Flux.onehotbatch(y_teste, 0:9)
 
-using Flux: crossentropy, onecold, onehotbatch, params, train!
+modelo = Chain(
+       # 28x28 => 14x14
+       Conv((5, 5), 1=>8,   pad=2, stride=2, relu),
+       # 14x14 => 7x7
+       Conv((3, 3), 8=>16,  pad=1, stride=2, relu),
+       # 7x7 => 4x4
+       Conv((3, 3), 16=>32, pad=1, stride=2, relu),
+       # 4x4 => 2x2
+       Conv((3, 3), 32=>32, pad=1, stride=2, relu),
+       # Average pooling on each width x height feature map
+       GlobalMeanPool(),
+       Flux.flatten,
+       Dense(32, 10),
+       Flux.softmax )
 
-using Random, Statistics
+acuracia(ŷ, y) = (mean(Flux.onecold(ŷ) .== Flux.onecold(y)))
+perda(x, y)     = Flux.crossentropy(modelo(x), y)
 
-# set random seed
+opt = Flux.ADAM()
+ps  = Flux.params(modelo)
 
-Random.seed!(1)
+num_épocas = 11
 
-# load data
-
-X_train_raw, y_train_raw = MLDatasets.MNIST(:train)[:]
-
-X_test_raw, y_test_raw = MLDatasets.MNIST(:test)[:]
-
-# view training input
-
-X_train_raw
-
-index = 1
-
-img = X_train_raw[:, :, index]
-
-colorview(Gray, img')
-
-# view training label
-
-y_train_raw
-
-y_train_raw[index]
-
-# view testing input
-
-X_test_raw
-
-img = X_test_raw[:, :, index]
-
-colorview(Gray, img')
-
-# view testing label
-
-y_test_raw
-
-y_test_raw[index]
-
-# flatten input data
-
-X_train = Flux.flatten(X_train_raw)
-
-X_test = Flux.flatten(X_test_raw)
-
-# one-hot encode labels
-
-y_train = onehotbatch(y_train_raw, 0:9)
-
-y_test = onehotbatch(y_test_raw, 0:9)
-
-# define model architecture
-
-model = Chain(
-    Dense(28 * 28, 32, relu),
-    Dense(32, 10),
-    softmax
-)
-
-# define loss function
-
-loss(x, y) = crossentropy(model(x), y)
-
-# track parameters
-
-ps = params(model)
-
-# select optimizer
-
-learning_rate = Float32(0.01)
-
-opt = ADAM(learning_rate)
-
-# train model
-
-loss_history = []
-
-epochs = 500
-
-for epoch in 1:epochs
-    # train model
-    train!(loss, ps, [(X_train, y_train)], opt)
-    # print report
-    train_loss = loss(X_train, y_train)
-    push!(loss_history, train_loss)
-    println("Epoch = $epoch : Training Loss = $train_loss")
+for época in 1:num_épocas
+  println("Época ", época)
+  Flux.train!(perda, ps, dados_treino, opt)
+  
+  # Calcule a acurácia:
+  ŷteste = modelo(x_teste)
+  acu = acuracia(ŷteste, y_teste)
+  
+  @info(@sprintf("[%d]: Acurácia nos testes: %.4f", época, acu))
+  # Se a acurácia for muito boa, termine o treino
+  if acu >= 0.999
+     @info(" -> Término prematuro: alcançamos uma acurácia de 99.9%")
+     break
+  end  
 end
 
-# make predictions
+ŷtreino =   modelo(x_treino)
+ŷteste  =   modelo(x_teste)
 
-y_hat_raw = model(X_test)
+acuracia(ŷtreino, y_treino)
+acuracia(ŷteste, y_teste)
 
-y_hat = onecold(y_hat_raw) .- 1
+Flux.onecold(y_treino[:,2]) - 1  # rótulo da amostra 2
+plot(Gray.(x_treino[:,:,1,2]))   # imagem da amostra 2
 
-y = y_test_raw
+cm = ConfusionMatrix()
+fit!(cm, Flux.onecold(y_teste) .-1, Flux.onecold(ŷteste) .-1)
+print(cm)
 
-mean(y_hat .== y)
+res = info(cm)
 
-# display results
+heatmap(string.(res["categories"]),
+        string.(res["categories"]),
+        res["normalised_scores"],
+        seriescolor=cgrad([:white,:blue]),
+        xlabel="Predito",
+        ylabel="Real",
+        title="Matriz de Confusão (scores normalizados)")
 
-check = [y_hat[i] == y[i] for i in 1:length(y)]
+# Limita o mapa de cores, para vermos melhor onde os erros estão
 
-index = collect(1:length(y))
-
-check_display = [index y_hat y check]
-
-# vscodedisplay(check_display)
-
-# view misclassifications
-
-misclass_index = 9
-
-img = X_test_raw[:, :, misclass_index]
-
-colorview(Gray, img')
-
-y[misclass_index]
-
-y_hat[misclass_index]
-
-# initialize plot
-
-gr(size = (600, 600))
-
-# plot learning curve
-
-p_l_curve = plot(1:epochs, loss_history,
-  xlabel = "Epochs",
-  ylabel = "Loss",
-  title = "Learning Curve",
-  legend = false,
-  color = :blue,
-  linewidth = 2
-)
-
-# save plot
-
-Plots.savefig(p_l_curve, "ann_learning_curve.svg")
+heatmap(string.(res["categories"]),
+        string.(res["categories"]),
+        res["normalised_scores"],
+        seriescolor=cgrad([:white,:blue]),
+        clim=(0., 0.02),
+        xlabel="Predito",
+        ylabel="Real",
+        title="Matriz de Confusão (scores normalizados)")
