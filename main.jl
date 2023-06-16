@@ -30,15 +30,57 @@ x_teste           = (x_teste .- média_x_teste) ./ desvio_x_teste;
 y_teste = Flux.onehotbatch(y_teste, 0:9)
 
 modelo = Chain(
-   Conv((5,5), 3=>16, relu),
+   # Camada 1: 32x32 => 14x14
+   Conv((5, 5), 3=>32,   pad=2, stride=1, relu),
+       
+   # Camada 2: 28x28 => 24x24
+   Conv((5, 5), 32=>32,  stride=1, relu, bias=false),
+   
+   # Camada 3
+   BatchNorm(32, relu),
+   # 24x24 => 12x12
    MaxPool((2,2)),
-   Conv((5,5), 16=>8, relu),
+   Dropout(0.25),
+   
+   #  12x12 => 10x10
+   Conv((3, 3), 32=>64, stride=1, relu),
+   
+   
+   # Camada 4: 10x10 => 8x8
+   Conv((3, 3), 64=>64, stride=1, relu, bias=false),
+   
+   # Camada 5
+   BatchNorm(64, relu),
+   # 8x8 => 4x4
    MaxPool((2,2)),
-   x -> reshape(x, :, size(x, 4)),
-   Dense(200, 120),
-   Dense(120, 84),
+   Dropout(0.25),
+   
+   # 1600 = 64x4x4
+   Flux.flatten,
+   
+   # Camada 6
+   Dense(1600, 256, bias=false),
+   
+   # Camada 7
+   BatchNorm(256, relu),
+
+   # Camada 8
+   Dense(256, 128, bias=false),
+
+   # Camada 9
+   BatchNorm(128, relu),
+
+   # Camada 10       
+   Dense(128, 84, bias=false),              
+
+   # Camada 11
+   BatchNorm(84, relu),
+
+   Dropout(0.25),
+          
+   # Saída
    Dense(84, 10),
-   Flux.softmax
+   Flux.softmax 
 )
 
 acuracia(ŷ, y) = (mean(Flux.onecold(ŷ) .== Flux.onecold(y)))
