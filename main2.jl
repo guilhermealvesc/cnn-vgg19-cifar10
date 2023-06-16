@@ -80,6 +80,8 @@ acuracia(ŷ, y) = (mean(Flux.onecold(ŷ) .== Flux.onecold(y)));
 perda(x, y) = Flux.crossentropy(modelo(x), y);
 
 opt = Flux.ADAM(3e-3);  # taxa de aprendizagem 
+
+
 ps = Flux.params(modelo);
 
 num_épocas = 11
