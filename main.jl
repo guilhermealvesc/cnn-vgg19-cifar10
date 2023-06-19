@@ -114,16 +114,16 @@ for época in 1:num_épocas
 
 end
 
-ŷtreino = modelo(x_treino)
+# ŷtreino = modelo(x_treino)
 ŷteste = modelo(x_teste)
 
-acuracia(ŷtreino, y_treino)
-acuracia(ŷteste, y_teste)
+# acuracia(ŷtreino, y_treino)
+# acuracia(ŷteste, y_teste)
 
-image(x) = colorview(RGB, permutedims(x, (3, 1, 2)))
+# image(x) = colorview(RGB, permutedims(x, (3, 1, 2)))
 
-class_names[Flux.onecold(y_treino[:, 150])]  # rótulo da amostra 2
-plot(image(x_treino[:, :, :, 150]))
+# class_names[Flux.onecold(y_treino[:, 150])]  # rótulo da amostra 2
+# plot(image(x_treino[:, :, :, 150]))
 
 cm = ConfusionMatrix()
 fit!(cm, Flux.onecold(y_teste) .- 1, Flux.onecold(ŷteste) .- 1)
